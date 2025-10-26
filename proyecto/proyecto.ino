@@ -33,8 +33,8 @@ DHT dht(DHTPIN, DHTTYPE);
 BlynkTimer timer;
 
 // Calibration values - adjust these based on your sensor readings
-const int AirValue = 790;   // Value when soil sensor is dry
-const int WaterValue = 390; // Value when soil sensor is in water
+const int AirValue = 1024;   // Value when soil sensor is dry
+const int WaterValue = 200; // Value when soil sensor is in water
 
 // Variables para almacenar lecturas
 float temperature = 0;
@@ -74,8 +74,8 @@ void readDHT() {
   humidity = h;
   
   // Send to Blynk
-  Blynk.virtualWrite(V2, temperature);  // V6 for Temperature
-  Blynk.virtualWrite(V3, humidity);     // V7 for Humidity
+  Blynk.virtualWrite(V2, temperature); 
+  Blynk.virtualWrite(V3, humidity);     
   
   Serial.print("Temperature: ");
   Serial.print(temperature);
@@ -105,7 +105,6 @@ void readSoilMoisture() {
 }
 
 // Update LCD display with all sensor data
-// Update LCD display with emotion and advice based on sensor data
 void updateLCD() {
   lcd.clear();
 
@@ -195,9 +194,6 @@ void setup() {
 
   // Initialize Blynk
   Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
-  // You can also specify server:
-  // Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass, "blynk.cloud", 80);
-  // Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass, IPAddress(192,168,1,100), 8080);
 
   // Setup timers for sensor readings
   timer.setInterval(2000L, readAllSensors); // Read all sensors every 2 seconds
@@ -209,7 +205,4 @@ void setup() {
 void loop() {
   Blynk.run();
   timer.run();
-  // You can inject your own code or combine it with other sketches.
-  // Check other examples on how to communicate with Blynk. Remember
-  // to avoid delay() function!
 }
