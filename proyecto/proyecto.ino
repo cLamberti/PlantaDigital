@@ -12,6 +12,7 @@
 #define BLYNK_PRINT Serial
 
 #include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
 #include <BlynkSimpleEsp8266.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
@@ -19,13 +20,23 @@
 
 // Your WiFi credentials.
 // Set password to "" for open networks.
-char ssid[] = "ARRIS-2F01";
-char pass[] = "12345678";
+char ssid[] = "HONOR X7b";
+char pass[] = "pablurius2004";
+
+
+// WS
+ESP8266WebServer server(80);
+
 
 // LCD and sensors setup
 #define soil_moisture_pin A0
 #define DHTPIN 2          // DHT11 connected to GPIO2 (D4 on NodeMCU)
 #define DHTTYPE DHT11     // DHT 11
+#define BUZZER_PIN 14 // D5 = GPIO14
+bool alertState = false;
+
+
+
 
 LiquidCrystal_I2C lcd(0x27, 16, 2); // Set the LCD address to 0x27 for a 16 chars and 2 line display
 DHT dht(DHTPIN, DHTTYPE);
@@ -60,28 +71,89 @@ BLYNK_CONNECTED()
   Blynk.setProperty(V3, "url", "https://docs.blynk.io/en/getting-started/what-do-i-need-to-blynk/how-quickstart-device-was-made");
 }
 
+// ===== PÁGINA HTML =====
+String getHTML() {
+  String html = R"rawliteral(
+  <!DOCTYPE html>
+  <html>
+  <head>
+    <meta charset="utf-8">
+    <title>Planta Digital</title>
+    <style>
+      body { font-family: Arial; background:#e3f2fd; text-align:center; }
+      .card { background:white; display:inline-block; padding:20px; border-radius:12px;
+              box-shadow:0 2px 6px rgba(0,0,0,0.2); margin-top:50px; }
+      h1 { color:#1565c0; }
+      p { font-size:18px; }
+    </style>
+  </head>
+  <body>
+    <h1>Planta Digital</h1>
+    <div class='card'>
+      <p> Temperatura: <b id='temperature'>--</b> °C</p>
+      <p> Humedad Ambiental: <b id='humidity'>--</b> %</p>
+      <p> Humedad del Suelo: <b id='soilMoistureValue'>--</b> </p>
+      <p> Porcentaje de la humedad del suelo: <b id='soilMoisturePercent'>--</b> %</p>  
+    </div>
+    <script>
+      async function updateData(){
+        const res = await fetch('/data');
+        const data = await res.json();
+        document.getElementById('temperature').textContent = data.temperature;
+        document.getElementById('humidity').textContent = data.humidity;
+        document.getElementById('soilMoistureValue').textContent = data.soil;
+        document.getElementById('soilMoisturePercent').textContent = data.soilPercent;
+      }
+      setInterval(updateData, 2000);
+    </script>
+  </body>
+  </html>
+  )rawliteral";
+
+  return html;
+}
+// Configutacion del server
+void setupServer() {
+  server.on("/", []() {
+    server.send(200, "text/html", getHTML());
+  });
+
+  server.on("/data", []() {
+    String json = "{";
+    json += "\"temperature\":" + String(temperature, 1) + ",";
+    json += "\"humidity\":" + String(humidity, 1) + ",";
+    json += "\"soil\":" + String(soilMoistureValue) + ",";
+    json += "\"soilPercent\":" + String(soilMoisturePercent);
+    json += "}";
+    server.send(200, "application/json", json);
+  });
+
+  server.begin();
+  Serial.println("Servidor web iniciado.");
+}
 // Read DHT11 sensor (temperature and humidity)
 void readDHT() {
   float h = dht.readHumidity();
   float t = dht.readTemperature(); // Read temperature as Celsius
   
   if (isnan(h) || isnan(t)) {
-    Serial.println("Failed to read from DHT sensor!");
     return;
   }
   
   temperature = t;
   humidity = h;
   
+
+  
   // Send to Blynk
   Blynk.virtualWrite(V2, temperature); 
   Blynk.virtualWrite(V3, humidity);     
   
-  Serial.print("Temperature: ");
-  Serial.print(temperature);
-  Serial.print("°C, Humidity: ");
-  Serial.print(humidity);
-  Serial.println("%");
+  //Serial.print("Temperature: ");
+  //Serial.print(temperature);
+  //Serial.print("°C, Humidity: ");
+  //Serial.print(humidity);
+  //Serial.println("%");
 }
 
 // This function reads soil moisture and updates display + Blynk
@@ -97,11 +169,11 @@ void readSoilMoisture() {
   Blynk.virtualWrite(V1, soilMoistureValue);
   
   // Also print to Serial for debugging
-  Serial.print("Soil Moisture: ");
-  Serial.print(soilMoistureValue);
-  Serial.print(" (");
-  Serial.print(soilMoisturePercent);
-  Serial.println("%)");
+ // Serial.print("Soil Moisture: ");
+  //Serial.print(soilMoistureValue);
+  //Serial.print(" (");
+  //Serial.print(soilMoisturePercent);
+  //Serial.println("%)");
 }
 
 // Update LCD display with all sensor data
@@ -118,12 +190,13 @@ void updateLCD() {
   }
 
   // Evaluar condiciones
-  bool sueloSeco = soilMoisturePercent < 30;
-  bool sueloMuyHumed = soilMoisturePercent > 90;
+  bool sueloMuySeco = soilMoisturePercent < 25;
+  bool sueloSeco = soilMoisturePercent < 45;
+  bool sueloMuyHumed = soilMoisturePercent > 85;
   bool tempBaja = temperature < 18;
   bool tempAlta = temperature > 30;
   bool humedadBaja = humidity < 40;
-  bool humedadAlta = humidity > 80;
+  bool humedadAlta = humidity > 97;
 
   // Determinar estado general
   if (!sueloSeco && !sueloMuyHumed && !tempBaja && !tempAlta && !humedadBaja && !humedadAlta) {
@@ -132,16 +205,33 @@ void updateLCD() {
     lcd.print("(^_^)");
     lcd.setCursor(2, 1);
     lcd.print("Estoy feliz!");
+    alertState = false;
+
+
+
+
   } 
+  else if (sueloMuySeco){
+    // Condiciones desfavorables 
+    lcd.setCursor(4, 0);
+    lcd.print("(X_X)");
+    lcd.setCursor(0, 1);
+    lcd.print("Necesito Agua!!!!");
+    alertState = true;
+  }
   else if (sueloSeco || sueloMuyHumed || tempBaja || tempAlta || humedadBaja || humedadAlta) {
+
     // Condiciones desfavorables 
     lcd.setCursor(4, 0);
     lcd.print("(T_T)");
     lcd.setCursor(0, 1);
 
+
+
+
     // Mostrar necesidad principal
     if (sueloSeco) {
-      lcd.print("Necesito agua!");
+      lcd.print("Necesito agua");
     } 
     else if (sueloMuyHumed) {
       lcd.print("Demasiada agua!");
@@ -160,6 +250,7 @@ void updateLCD() {
     }
   } 
   else {
+    alertState = false;
     // Estado neutro 
     lcd.setCursor(4, 0);
     lcd.print("(-_-)");
@@ -167,6 +258,22 @@ void updateLCD() {
     lcd.print("Estoy estable.");
   }
 }
+void buzzerAlert() {
+  static bool buzzerOn = false;
+
+  if (alertState) {
+
+    if (buzzerOn) {
+      tone(BUZZER_PIN, 300); // Frecuencia más audible
+    } else {
+      noTone(BUZZER_PIN);
+    }
+    buzzerOn = !buzzerOn;
+  } else {
+    noTone(BUZZER_PIN);
+  }
+}
+
 
 
 // Combined function to read all sensors and update display
@@ -179,6 +286,8 @@ void readAllSensors() {
 void setup() {
   // Debug console
   Serial.begin(115200);
+  timer.setInterval(500L, buzzerAlert); // Pitido cada 500ms
+
 
   // Initialize LCD
   lcd.init();
@@ -188,21 +297,41 @@ void setup() {
   lcd.print("Iniciando...");
   lcd.setCursor(0, 1);
   lcd.print("Planta Digital");
+ 
 
   // Initialize DHT sensor
   dht.begin();
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
+
 
   // Initialize Blynk
   Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+
 
   // Setup timers for sensor readings
   timer.setInterval(2000L, readAllSensors); // Read all sensors every 2 seconds
   
   delay(2000);
   lcd.clear();
+
+  Serial.println();
+  Serial.println("Conectando a WiFi...");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("WiFi conectado por Blynk");
+  Serial.print("IP local: ");
+  Serial.println(WiFi.localIP());
+
+  setupServer();
 }
 
 void loop() {
   Blynk.run();
   timer.run();
+  server.handleClient();
+  yield();  
 }
