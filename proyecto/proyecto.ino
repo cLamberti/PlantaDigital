@@ -20,8 +20,8 @@
 
 // Your WiFi credentials.
 // Set password to "" for open networks.
-char ssid[] = "HONOR X7b";
-char pass[] = "pablurius2004";
+char ssid[] = "ARRIS-2F01";
+char pass[] = "12345678";
 
 
 // WS
@@ -71,39 +71,236 @@ BLYNK_CONNECTED()
   Blynk.setProperty(V3, "url", "https://docs.blynk.io/en/getting-started/what-do-i-need-to-blynk/how-quickstart-device-was-made");
 }
 
-// ===== PÁGINA HTML =====
+// ===== PÁGINA HTML MEJORADA =====
 String getHTML() {
   String html = R"rawliteral(
   <!DOCTYPE html>
   <html>
   <head>
     <meta charset="utf-8">
-    <title>Planta Digital</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planta Digital - Monitor</title>
     <style>
-      body { font-family: Arial; background:#e3f2fd; text-align:center; }
-      .card { background:white; display:inline-block; padding:20px; border-radius:12px;
-              box-shadow:0 2px 6px rgba(0,0,0,0.2); margin-top:50px; }
-      h1 { color:#1565c0; }
-      p { font-size:18px; }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      body { 
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px;
+      }
+      
+      .header {
+        text-align: center;
+        color: white;
+        margin-bottom: 30px;
+        animation: fadeIn 0.8s ease-in;
+      }
+      
+      .header h1 {
+        font-size: 2.5em;
+        margin-bottom: 10px;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+      }
+      
+      .header p {
+        font-size: 1.1em;
+        opacity: 0.9;
+      }
+      
+      .container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 20px;
+        max-width: 1200px;
+        width: 100%;
+        animation: slideUp 0.8s ease-out;
+      }
+      
+      .card { 
+        background: white;
+        padding: 25px;
+        border-radius: 20px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        position: relative;
+        overflow: hidden;
+      }
+      
+      .card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+      }
+      
+      .card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 4px;
+        background: linear-gradient(90deg, #667eea, #764ba2);
+      }
+      
+      .card-icon {
+        font-size: 3em;
+        margin-bottom: 15px;
+        display: block;
+      }
+      
+      .card-title {
+        font-size: 1.1em;
+        color: #555;
+        margin-bottom: 10px;
+        font-weight: 600;
+      }
+      
+      .card-value {
+        font-size: 2.5em;
+        font-weight: bold;
+        color: #667eea;
+        display: block;
+        margin-bottom: 5px;
+      }
+      
+      .card-unit {
+        font-size: 1em;
+        color: #888;
+      }
+      
+      .status-bar {
+        width: 100%;
+        height: 8px;
+        background: #e0e0e0;
+        border-radius: 10px;
+        margin-top: 15px;
+        overflow: hidden;
+      }
+      
+      .status-fill {
+        height: 100%;
+        border-radius: 10px;
+        transition: width 0.5s ease, background 0.5s ease;
+      }
+      
+      .temp-card .status-fill { background: linear-gradient(90deg, #f093fb, #f5576c); }
+      .humidity-card .status-fill { background: linear-gradient(90deg, #4facfe, #00f2fe); }
+      .soil-card .status-fill { background: linear-gradient(90deg, #43e97b, #38f9d7); }
+      
+      .footer {
+        margin-top: 30px;
+        text-align: center;
+        color: white;
+        opacity: 0.8;
+        font-size: 0.9em;
+      }
+      
+      .loading {
+        color: #999;
+        font-style: italic;
+      }
+      
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      
+      @keyframes slideUp {
+        from { 
+          opacity: 0;
+          transform: translateY(30px);
+        }
+        to { 
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      
+      @media (max-width: 768px) {
+        .header h1 { font-size: 2em; }
+        .container { grid-template-columns: 1fr; }
+      }
     </style>
   </head>
   <body>
-    <h1>Planta Digital</h1>
-    <div class='card'>
-      <p> Temperatura: <b id='temperature'>--</b> °C</p>
-      <p> Humedad Ambiental: <b id='humidity'>--</b> %</p>
-      <p> Humedad del Suelo: <b id='soilMoistureValue'>--</b> </p>
-      <p> Porcentaje de la humedad del suelo: <b id='soilMoisturePercent'>--</b> %</p>  
+    <div class="header">
+      <h1>🌱 Planta Digital</h1>
+      <p>Sistema de Monitoreo en Tiempo Real</p>
     </div>
+    
+    <div class="container">
+      <div class="card temp-card">
+        <span class="card-icon">🌡️</span>
+        <div class="card-title">Temperatura</div>
+        <span class="card-value" id="temperature">--</span>
+        <span class="card-unit">°C</span>
+        <div class="status-bar">
+          <div class="status-fill" id="temp-bar" style="width: 0%"></div>
+        </div>
+      </div>
+      
+      <div class="card humidity-card">
+        <span class="card-icon">💧</span>
+        <div class="card-title">Humedad Ambiental</div>
+        <span class="card-value" id="humidity">--</span>
+        <span class="card-unit">%</span>
+        <div class="status-bar">
+          <div class="status-fill" id="humidity-bar" style="width: 0%"></div>
+        </div>
+      </div>
+      
+      <div class="card soil-card">
+        <span class="card-icon">🌿</span>
+        <div class="card-title">Humedad del Suelo</div>
+        <span class="card-value" id="soilMoisturePercent">--</span>
+        <span class="card-unit">%</span>
+        <div class="status-bar">
+          <div class="status-fill" id="soil-bar" style="width: 0%"></div>
+        </div>
+        <div style="margin-top: 10px; font-size: 0.9em; color: #888;">
+          Valor raw: <span id="soilMoistureValue">--</span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="footer">
+      <p>Última actualización: <span id="lastUpdate">--</span></p>
+    </div>
+    
     <script>
       async function updateData(){
-        const res = await fetch('/data');
-        const data = await res.json();
-        document.getElementById('temperature').textContent = data.temperature;
-        document.getElementById('humidity').textContent = data.humidity;
-        document.getElementById('soilMoistureValue').textContent = data.soil;
-        document.getElementById('soilMoisturePercent').textContent = data.soilPercent;
+        try {
+          const res = await fetch('/data');
+          const data = await res.json();
+          
+          // Actualizar valores
+          document.getElementById('temperature').textContent = data.temperature;
+          document.getElementById('humidity').textContent = data.humidity;
+          document.getElementById('soilMoistureValue').textContent = data.soil;
+          document.getElementById('soilMoisturePercent').textContent = data.soilPercent;
+          
+          // Actualizar barras de progreso
+          document.getElementById('temp-bar').style.width = Math.min((data.temperature / 50) * 100, 100) + '%';
+          document.getElementById('humidity-bar').style.width = data.humidity + '%';
+          document.getElementById('soil-bar').style.width = data.soilPercent + '%';
+          
+          // Actualizar timestamp
+          const now = new Date();
+          document.getElementById('lastUpdate').textContent = now.toLocaleTimeString();
+        } catch (error) {
+          console.error('Error al obtener datos:', error);
+        }
       }
+      
+      // Actualizar inmediatamente y luego cada 2 segundos
+      updateData();
       setInterval(updateData, 2000);
     </script>
   </body>
@@ -112,6 +309,8 @@ String getHTML() {
 
   return html;
 }
+// Configutacion del server
+
 // Configutacion del server
 void setupServer() {
   server.on("/", []() {
@@ -206,7 +405,7 @@ void updateLCD() {
     lcd.setCursor(2, 1);
     lcd.print("Estoy feliz!");
     alertState = false;
-
+  
 
 
 
@@ -225,7 +424,7 @@ void updateLCD() {
     lcd.setCursor(4, 0);
     lcd.print("(T_T)");
     lcd.setCursor(0, 1);
-
+    alertState = false;
 
 
 
