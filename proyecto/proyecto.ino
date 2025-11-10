@@ -62,7 +62,7 @@ int soilMoisturePercent = 0;
 String userEmail = "";
 bool emailConfigured = false;
 unsigned long lastEmailSent = 0;
-const unsigned long EMAIL_COOLDOWN = 900000; // 15 minutos
+const unsigned long EMAIL_COOLDOWN = 9000; // 15 minutos
 bool previousAlertState = false; // Para detectar cambio de estado
 
 // Objetos de email
@@ -117,22 +117,22 @@ void sendEmailAlert() {
   SMTP_Message message;
   message.sender.name = "Planta Digital";
   message.sender.email = AUTHOR_EMAIL;
-  message.subject = "🚨 ¡Tu planta necesita agua!";
+  message.subject = "🚨 ¡Heyyy necesito agua!";
   message.addRecipient("Usuario", userEmail);
 
   // Contenido HTML del email
   String htmlMsg = "<div style='font-family: Arial; padding: 20px; background: #f5f5f5;'>";
   htmlMsg += "<div style='background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);'>";
   htmlMsg += "<h1 style='color: #e74c3c;'>🌱 Alerta de Planta Digital</h1>";
-  htmlMsg += "<p style='font-size: 18px;'>Tu planta necesita <strong>agua urgentemente</strong>.</p>";
+  htmlMsg += "<p style='font-size: 18px;'>Necesito <strong>agua urgentemente</strong>.</p>";
   htmlMsg += "<div style='background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0;'>";
   htmlMsg += "<h3>📊 Estado Actual:</h3>";
   htmlMsg += "<p>🌡️ Temperatura: <strong>" + String(temperature, 1) + "°C</strong></p>";
   htmlMsg += "<p>💧 Humedad Ambiental: <strong>" + String(humidity, 1) + "%</strong></p>";
   htmlMsg += "<p>🌿 Humedad del Suelo: <strong>" + String(soilMoisturePercent) + "%</strong></p>";
   htmlMsg += "</div>";
-  htmlMsg += "<p style='color: #666;'>Por favor, riega tu planta lo antes posible.</p>";
-  htmlMsg += "<p style='color: #999; font-size: 12px; margin-top: 30px;'>Este es un mensaje automático del sistema Planta Digital.</p>";
+  htmlMsg += "<p style='color: #666;'>Por favor, riegame lo antes posible.</p>";
+  htmlMsg += "<p style='color: #999; font-size: 12px; margin-top: 30px;'>Este es un mensaje automático de tu Planta Digital.</p>";
   htmlMsg += "</div></div>";
 
   message.html.content = htmlMsg.c_str();
@@ -266,7 +266,7 @@ String getHTML() {
         color: white;
         border: none;
         border-radius: 10px;
-        font-size: 16px;
+        font-size: 10px;
         cursor: pointer;
         transition: transform 0.2s;
       }
@@ -419,7 +419,7 @@ String getHTML() {
       <p>Ingresa tu dirección de correo electrónico para recibir alertas cuando la planta necesite agua:</p>
       <div class="email-form">
         <input type="email" id="emailInput" placeholder="tu@email.com" required>
-        <button onclick="saveEmail()">Guardar Email</button>
+        <button onclick="saveEmail()">Guardar</button>
       </div>
       <div id="emailStatus" class="email-status"></div>
     </div>
