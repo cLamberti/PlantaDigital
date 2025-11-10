@@ -17,12 +17,17 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <DHT.h>
+#include <ESP_Mail_Client.h>
 
 // Your WiFi credentials.
-// Set password to "" for open networks.
 char ssid[] = "ARRIS-2F01";
 char pass[] = "12345678";
 
+// Configuración de Email (Gmail)
+#define SMTP_HOST "smtp.gmail.com"
+#define SMTP_PORT 465
+#define AUTHOR_EMAIL "plantadigital.una@gmail.com"
+#define AUTHOR_PASSWORD "deollnazenwsbtja"
 
 // WS
 ESP8266WebServer server(80);
@@ -53,6 +58,16 @@ float humidity = 0;
 int soilMoistureValue = 0;
 int soilMoisturePercent = 0;
 
+// Variables para email mejoradas
+String userEmail = "";
+bool emailConfigured = false;
+unsigned long lastEmailSent = 0;
+const unsigned long EMAIL_COOLDOWN = 900000; // 15 minutos
+bool previousAlertState = false; // Para detectar cambio de estado
+
+// Objetos de email
+SMTPSession smtp;
+
 // This function is called every time the Virtual Pin 0 state changes
 BLYNK_WRITE(V0)
 {
@@ -69,6 +84,102 @@ BLYNK_CONNECTED()
   Blynk.setProperty(V3, "offImageUrl", "https://static-image.nyc3.cdn.digitaloceanspaces.com/general/fte/congratulations.png");
   Blynk.setProperty(V3, "onImageUrl", "https://static-image.nyc3.cdn.digitaloceanspaces.com/general/fte/congratulations_pressed.png");
   Blynk.setProperty(V3, "url", "https://docs.blynk.io/en/getting-started/what-do-i-need-to-blynk/how-quickstart-device-was-made");
+}
+
+// Callback para debug del email
+void smtpCallback(SMTP_Status status);
+
+// Función para enviar email MEJORADA
+void sendEmailAlert() {
+  if (!emailConfigured || userEmail == "") {
+    Serial.println("❌ Email no configurado");
+    return;
+  }
+
+  // Verificar cooldown
+  if (millis() - lastEmailSent < EMAIL_COOLDOWN) {
+    unsigned long remaining = (EMAIL_COOLDOWN - (millis() - lastEmailSent)) / 60000;
+    Serial.println("⏳ Email en cooldown. Espera " + String(remaining) + " minutos");
+    return;
+  }
+
+  Serial.println("📧 Preparando envío de email...");
+
+  // Configurar sesión SMTP
+  ESP_Mail_Session session;
+  session.server.host_name = SMTP_HOST;
+  session.server.port = SMTP_PORT;
+  session.login.email = AUTHOR_EMAIL;
+  session.login.password = AUTHOR_PASSWORD;
+  session.login.user_domain = "";
+
+  // Configurar mensaje
+  SMTP_Message message;
+  message.sender.name = "Planta Digital";
+  message.sender.email = AUTHOR_EMAIL;
+  message.subject = "🚨 ¡Tu planta necesita agua!";
+  message.addRecipient("Usuario", userEmail);
+
+  // Contenido HTML del email
+  String htmlMsg = "<div style='font-family: Arial; padding: 20px; background: #f5f5f5;'>";
+  htmlMsg += "<div style='background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);'>";
+  htmlMsg += "<h1 style='color: #e74c3c;'>🌱 Alerta de Planta Digital</h1>";
+  htmlMsg += "<p style='font-size: 18px;'>Tu planta necesita <strong>agua urgentemente</strong>.</p>";
+  htmlMsg += "<div style='background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0;'>";
+  htmlMsg += "<h3>📊 Estado Actual:</h3>";
+  htmlMsg += "<p>🌡️ Temperatura: <strong>" + String(temperature, 1) + "°C</strong></p>";
+  htmlMsg += "<p>💧 Humedad Ambiental: <strong>" + String(humidity, 1) + "%</strong></p>";
+  htmlMsg += "<p>🌿 Humedad del Suelo: <strong>" + String(soilMoisturePercent) + "%</strong></p>";
+  htmlMsg += "</div>";
+  htmlMsg += "<p style='color: #666;'>Por favor, riega tu planta lo antes posible.</p>";
+  htmlMsg += "<p style='color: #999; font-size: 12px; margin-top: 30px;'>Este es un mensaje automático del sistema Planta Digital.</p>";
+  htmlMsg += "</div></div>";
+
+  message.html.content = htmlMsg.c_str();
+  message.html.charSet = "utf-8";
+  message.html.transfer_encoding = Content_Transfer_Encoding::enc_7bit;
+  message.priority = esp_mail_smtp_priority::esp_mail_smtp_priority_high;
+  message.response.notify = esp_mail_smtp_notify_success | esp_mail_smtp_notify_failure | esp_mail_smtp_notify_delay;
+
+  // Configurar callback para debug
+  smtp.debug(1);
+  smtp.callback(smtpCallback);
+
+  // Conectar al servidor SMTP
+  Serial.println("🔌 Conectando al servidor SMTP...");
+  if (!smtp.connect(&session)) {
+    Serial.println("❌ Error de conexión: " + smtp.errorReason());
+    return;
+  }
+
+  // Enviar email
+  Serial.println("📤 Enviando email...");
+  if (!MailClient.sendMail(&smtp, &message)) {
+    Serial.println("❌ Error enviando: " + smtp.errorReason());
+  } else {
+    Serial.println("✅ Email enviado exitosamente!");
+    lastEmailSent = millis();
+  }
+
+  // Cerrar sesión
+  smtp.closeSession();
+}
+
+// Callback para mostrar el progreso del envío
+void smtpCallback(SMTP_Status status) {
+  Serial.println(status.info());
+
+  if (status.success()) {
+    Serial.println("✅ Email enviado correctamente");
+    Serial.println("Respuestas del servidor:");
+    for (size_t i = 0; i < smtp.sendingResult.size(); i++) {
+      SMTP_Result result = smtp.sendingResult.getItem(i);
+      Serial.printf("  Mensaje %d - %s: %s\n", 
+                    i + 1, 
+                    result.completed ? "Éxito" : "Fallo",
+                    result.recipients.c_str());
+    }
+  }
 }
 
 // ===== PÁGINA HTML MEJORADA =====
@@ -113,6 +224,74 @@ String getHTML() {
       .header p {
         font-size: 1.1em;
         opacity: 0.9;
+      }
+
+      .email-config {
+        background: white;
+        padding: 25px;
+        border-radius: 20px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        margin-bottom: 20px;
+        max-width: 600px;
+        width: 100%;
+      }
+
+      .email-config h2 {
+        color: #667eea;
+        margin-bottom: 15px;
+      }
+
+      .email-form {
+        display: flex;
+        gap: 10px;
+        margin-top: 15px;
+      }
+
+      .email-form input {
+        flex: 1;
+        padding: 12px;
+        border: 2px solid #e0e0e0;
+        border-radius: 10px;
+        font-size: 16px;
+      }
+
+      .email-form input:focus {
+        outline: none;
+        border-color: #667eea;
+      }
+
+      .email-form button {
+        padding: 12px 30px;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        font-size: 16px;
+        cursor: pointer;
+        transition: transform 0.2s;
+      }
+
+      .email-form button:hover {
+        transform: scale(1.05);
+      }
+
+      .email-status {
+        margin-top: 10px;
+        padding: 10px;
+        border-radius: 8px;
+        display: none;
+      }
+
+      .email-status.success {
+        background: #d4edda;
+        color: #155724;
+        display: block;
+      }
+
+      .email-status.error {
+        background: #f8d7da;
+        color: #721c24;
+        display: block;
       }
       
       .container {
@@ -235,6 +414,16 @@ String getHTML() {
       <p>Sistema de Monitoreo en Tiempo Real</p>
     </div>
     
+    <div class="email-config">
+      <h2>📧 Configuración de Notificaciones por Email</h2>
+      <p>Ingresa tu dirección de correo electrónico para recibir alertas cuando la planta necesite agua:</p>
+      <div class="email-form">
+        <input type="email" id="emailInput" placeholder="tu@email.com" required>
+        <button onclick="saveEmail()">Guardar Email</button>
+      </div>
+      <div id="emailStatus" class="email-status"></div>
+    </div>
+    
     <div class="container">
       <div class="card temp-card">
         <span class="card-icon">🌡️</span>
@@ -299,6 +488,41 @@ String getHTML() {
         }
       }
       
+      function saveEmail() {
+        const email = document.getElementById('emailInput').value.trim();
+        if (!email) {
+          showEmailStatus('Por favor ingresa una dirección de correo válida.', 'error');
+          return;
+        }
+        
+        // Enviar email al servidor
+        fetch('/setemail?email=' + encodeURIComponent(email), {
+          method: 'GET'
+        })
+        .then(response => response.text())
+        .then(data => {
+          if (data.includes('success')) {
+            showEmailStatus('¡Correo guardado correctamente!', 'success');
+            userEmail = email;
+          } else {
+            showEmailStatus('Error al guardar el correo. Por favor intenta nuevamente.', 'error');
+          }
+        })
+        .catch(error => {
+          console.error('Error:', error);
+          showEmailStatus('Error de conexión. Por favor intenta nuevamente.', 'error');
+        });
+      }
+      
+      function showEmailStatus(message, type) {
+        const statusDiv = document.getElementById('emailStatus');
+        statusDiv.textContent = message;
+        statusDiv.className = 'email-status ' + type;
+        setTimeout(() => {
+          statusDiv.style.display = 'none';
+        }, 5000);
+      }
+      
       // Actualizar inmediatamente y luego cada 2 segundos
       updateData();
       setInterval(updateData, 2000);
@@ -325,6 +549,18 @@ void setupServer() {
     json += "\"soilPercent\":" + String(soilMoisturePercent);
     json += "}";
     server.send(200, "application/json", json);
+  });
+
+  server.on("/setemail", []() {
+    String email = server.arg("email");
+    if (email.length() > 0) {
+      userEmail = email;
+      emailConfigured = true;
+      server.send(200, "text/plain", "success");
+      Serial.println("Email configurado: " + userEmail);
+    } else {
+      server.send(200, "text/plain", "error");
+    }
   });
 
   server.begin();
@@ -473,13 +709,24 @@ void buzzerAlert() {
   }
 }
 
+// Función mejorada para verificar y enviar email
+void checkAndSendEmail() {
+  // Solo enviar cuando el estado cambia de OK a ALERTA
+  if (alertState && !previousAlertState && emailConfigured && userEmail != "") {
+    Serial.println("🚨 Estado cambió a ALERTA - Enviando email");
+    sendEmailAlert();
+  }
+  
+  // Actualizar estado anterior
+  previousAlertState = alertState;
+}
 
 
-// Combined function to read all sensors and update display
 void readAllSensors() {
-  readDHT();           // Read temperature and humidity
-  readSoilMoisture();  // Read soil moisture
-  updateLCD();         // Update LCD with all data
+  readDHT();           
+  readSoilMoisture();  
+  updateLCD();        
+  checkAndSendEmail(); // Verificar y enviar email si es necesario
 }
 
 void setup() {
@@ -498,7 +745,7 @@ void setup() {
   lcd.print("Planta Digital");
  
 
-  // Initialize DHT sensor
+
   dht.begin();
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, LOW);
@@ -508,7 +755,6 @@ void setup() {
   Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
 
 
-  // Setup timers for sensor readings
   timer.setInterval(2000L, readAllSensors); // Read all sensors every 2 seconds
   
   delay(2000);
